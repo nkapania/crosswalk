@@ -80,7 +80,7 @@ class Pedestrian:
         self.radius = 1. #m
 
     def getAccel(self):
-        accel = np.random.randn()
+        accel = 0
         return accel
 
 
