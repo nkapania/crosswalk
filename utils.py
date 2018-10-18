@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib import animation
+import pdb
 
 class Road:
     def __init__(self, length = 80):
@@ -68,18 +69,31 @@ class Crosswalk:
 
 class Vehicle:
     #cY = y coordinate of crosswalk
-    def __init__(self, xBrake, v0 = 20):
+    def __init__(self, xBrake, crosswalk, v0 = 20):
         self.m = 1500. #kg
         self.v0 = v0
         self.lane = 2 # lane 2 corresponds to third lane from the left
         self.width = 1.5 #meters
         self.height = 2.5 #meters
         self.state = "driving"
-        self.kSpeed = 3.
+        self.kSpeed = 1.
         self.xBrake =  xBrake #position to start braking the car 
+        self.xStop = crosswalk.start[1] - self.height * 2 #desired stop position
+        self.stopBuffer = 1. #meters, give some room for vehicle to stop
+        self.accelLim = 3.0 # m / s^2
 
     def getAccel(self, xP, dxP, xV, dxV, t, crosswalk):
-        accel = self.getAccelStateMachine(xP, dxP, xV, dxV, t, crosswalk)
+        accel, state, dxVdes = self.getAccelStateMachine(xP, dxP, xV, dxV, t, crosswalk)
+        accel = self.limitAccel(accel)
+        return accel, state, dxVdes
+
+    def limitAccel(self, accel):
+        if accel > self.accelLim:
+            accel = self.accelLim
+
+        if accel < -self.accelLim:
+            accel = -self.accelLim
+
         return accel
 
     def getAccelStateMachine(self, xP, dxP, xV, dxV, t, crosswalk):
@@ -89,27 +103,31 @@ class Vehicle:
             state = 0
 
             #check if pedestrian in crosswalk
-            if xP > 0 and xP < crosswalk.width:
+            if xP > 0 and xP < crosswalk.width and xV < self.xStop:
                 self.state = "braking"
 
         elif self.state == "braking":
-            xStop = crosswalk.start[1] - self.height * 2 #give buffer for vehicle stop
 
             if xV < self.xBrake:
                 dxVdes = self.v0  #before brakepoint - keep driving!
+                accelDesired = 0
 
-            elif xV > xStop:
+            elif xV > self.xStop:
                 dxVdes = 0. #past the crosswalk, desired speed is 0
+                accelDesired = 0
 
             else:
-                dxVdes = self.v0 - self.v0 / (xStop - self.xBrake) * (xV - self.xBrake)
+                dxVdes = self.v0 - self.v0 / (self.xStop - self.xBrake) * (xV - self.xBrake)
+                accelDesired = -self.v0 / (self.xStop - self.xBrake) * dxV
+                #accelDesired = 0
             
 
-            accel = self.kSpeed*(dxVdes - dxV)
+            accel = accelDesired + self.kSpeed*(dxVdes - dxV)
             state = 1
 
-            if xP > crosswalk.width:
+            if (xP > crosswalk.width) or (xV > (self.xStop + self.stopBuffer)):
                 self.state = "driving"
+                #pdb.set_trace()
 
         return accel, state, dxVdes
 
@@ -199,6 +217,9 @@ class Simulation:
             dxP[i] = self.ts * ddxP[i] + dxP[i-1]
 
             xV[i] = self.ts * dxV[i] + xV[i-1]
+            if dxV[i] < 0:
+                dxV[i] = 0 #car cannot go backward
+
             xP[i] = self.ts * dxP[i] + xP[i-1]
 
 
