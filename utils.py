@@ -69,7 +69,7 @@ class Crosswalk:
 
 class Vehicle:
     #cY = y coordinate of crosswalk
-    def __init__(self, xBrake, crosswalk, v0 = 20):
+    def __init__(self, crosswalk, v0 = 20):
         self.m = 1500. #kg
         self.v0 = v0
         self.lane = 2 # lane 2 corresponds to third lane from the left
@@ -77,10 +77,10 @@ class Vehicle:
         self.height = 2.5 #meters
         self.state = "driving"
         self.kSpeed = 1.
-        self.xBrake =  xBrake #position to start braking the car 
         self.xStop = crosswalk.start[1] - self.height * 2 #desired stop position
         self.stopBuffer = 1. #meters, give some room for vehicle to stop
         self.accelLim = 3.0 # m / s^2
+        self.brakeDistance = 0. #to be updated in planning step
 
     def getAccel(self, xP, dxP, xV, dxV, t, crosswalk):
         accel, state, dxVdes = self.getAccelStateMachine(xP, dxP, xV, dxV, t, crosswalk)
@@ -104,27 +104,44 @@ class Vehicle:
 
             #check if pedestrian in crosswalk
             if xP > 0 and xP < crosswalk.width and xV < self.xStop:
+                self.state = "planning"
+
+        elif self.state == "planning":
+            state = 2
+            dxVdes = self.v0
+            accel = self.kSpeed*(dxVdes - dxV)
+            self.brakeDistance = dxV**2 / (2* self.accelLim)    #minimum distance required for braking, from kinematic equations
+            dist2crosswalk = self.xStop - xV
+
+            if dist2crosswalk > self.brakeDistance:
                 self.state = "braking"
+                print("possible to brake")
+
+            else:
+                self.state = "driving"
+                print("not possible to brake safely - driving on")
+
+
 
         elif self.state == "braking":
 
-            if xV < self.xBrake:
-                dxVdes = self.v0  #before brakepoint - keep driving!
-                accelDesired = 0
-
-            elif xV > self.xStop:
-                dxVdes = 0. #past the crosswalk, desired speed is 0
-                accelDesired = 0
-
-            else:
-                dxVdes = self.v0 - self.v0 / (self.xStop - self.xBrake) * (xV - self.xBrake)
-                accelDesired = -self.v0 / (self.xStop - self.xBrake) * dxV
-                #accelDesired = 0
+            #don't brake until we need to
+            dist2crosswalk = self.xStop - xV
             
+            #don't need to brake yet
+            if dist2crosswalk > self.brakeDistance:
+                accelDesired = 0.
+                dxVdes = self.v0
+
+            #brake at constant deceleration    
+            else:
+                accelDesired = -self.accelLim
+                dxVdes = dxV
 
             accel = accelDesired + self.kSpeed*(dxVdes - dxV)
             state = 1
 
+            #return to driving once past crosswalk or once pedestrian crosses
             if (xP > crosswalk.width) or (xV > (self.xStop + self.stopBuffer)):
                 self.state = "driving"
                 #pdb.set_trace()
@@ -142,14 +159,14 @@ class Pedestrian:
         self.waitTime = 0.5 #number of seconds pedestrian takes to gauge situation
         self.kSpeed = 10 #m/s2 per m/s of error
         self.vDes = 1.2 #m/s
-        self.minGap = 30. #m
+        self.minGap = 2.0 #seconds
 
-    def getAccel(self, xP, dxP, xV, t, crosswalk):
-        accel = self.getAccelStateMachine(xP, dxP, xV, t, crosswalk)
+    def getAccel(self, xP, dxP, xV, dxV, t, crosswalk):
+        accel = self.getAccelStateMachine(xP, dxP, xV, dxV, t, crosswalk)
         return accel
 
-    def getAccelStateMachine(self, xP, dxP, xV, t, crosswalk):
-        gap = self.calculateGap(xV, crosswalk)
+    def getAccelStateMachine(self, xP, dxP, xV, dxV, t, crosswalk):
+        gap = self.calculateGap(xV, dxV, crosswalk)
         if self.state == "waiting":
             if t > self.waitTime and gap > self.minGap:
                 self.state = "walking"
@@ -162,8 +179,8 @@ class Pedestrian:
 
         return accel, state, gap
 
-    def calculateGap(self,xV, crosswalk):
-        gap = crosswalk.start[1] - xV
+    def calculateGap(self,xV,dxV, crosswalk):
+        gap = (crosswalk.start[1] - xV) / dxV #time based gap
         #car is past the crosswalk
         if gap < 0:
             gap = 99999.
@@ -211,20 +228,21 @@ class Simulation:
             t[i] = t[i-1] + self.ts
 
             ddxV[i], vehicleState[i], dxVdes[i] = self.vehicle.getAccel(xP[i-1], dxP[i-1], xV[i-1], dxV[i-1], t[i-1], self.crosswalk)
-            ddxP[i], pedestrianState[i], gap[i] = self.pedestrian.getAccel(xP[i-1], dxP[i-1], xV[i-1], t[i-1], self.crosswalk)
+            ddxP[i], pedestrianState[i], gap[i] = self.pedestrian.getAccel(xP[i-1], dxP[i-1], xV[i-1], dxV[i-1], t[i-1], self.crosswalk)
 
             dxV[i] = self.ts * ddxV[i] + dxV[i-1]
             dxP[i] = self.ts * ddxP[i] + dxP[i-1]
 
-            xV[i] = self.ts * dxV[i] + xV[i-1]
             if dxV[i] < 0:
                 dxV[i] = 0 #car cannot go backward
 
+            xV[i] = self.ts * dxV[i] + xV[i-1]
             xP[i] = self.ts * dxP[i] + xP[i-1]
 
 
         self.out = {'t': t, 'xV': xV, 'dxV': dxV, 'ddxV': ddxV, 'xP': xP, 'dxP': dxP, 'ddxP': ddxP,
         'pedestrianState': pedestrianState, 'vehicleState': vehicleState, 'dxVdes': dxVdes}
+
 
         return self.out
 
