@@ -151,7 +151,7 @@ class Vehicle:
 
 
 class Pedestrian:
-    def __init__(self, v0 = 0):
+    def __init__(self, v0 = 0, minGap = 2.0):
         self.m = 50. #kg
         self.v0 = v0
         self.radius = 1. #m
@@ -159,7 +159,7 @@ class Pedestrian:
         self.waitTime = 0.5 #number of seconds pedestrian takes to gauge situation
         self.kSpeed = 10 #m/s2 per m/s of error
         self.vDes = 1.2 #m/s
-        self.minGap = 2.0 #seconds
+        self.minGap = minGap #seconds
 
     def getAccel(self, xP, dxP, xV, dxV, t, crosswalk):
         accel = self.getAccelStateMachine(xP, dxP, xV, dxV, t, crosswalk)
