@@ -72,7 +72,7 @@ class Vehicle:
     def __init__(self, crosswalk, v0 = 20):
         self.m = 1500. #kg
         self.v0 = v0
-        self.lane = 2 # lane 2 corresponds to third lane from the left
+        self.lane = 3 # lane 2 corresponds to third lane from the left
         self.width = 1.5 #meters
         self.height = 2.5 #meters
         self.state = "driving"
