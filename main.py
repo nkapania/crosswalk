@@ -4,7 +4,7 @@ from utils import *
 
 
 NUM_SIMULATIONS = 10
-roadLength = 100
+roadLength = 100.
 
 for i in range(NUM_SIMULATIONS):
 
@@ -13,13 +13,13 @@ for i in range(NUM_SIMULATIONS):
 	road = Road(length = roadLength)
 	crosswalk = Crosswalk(road, roadFraction = roadFraction) 
 	veh = Vehicle(crosswalk = crosswalk, v0 = 15.)
-	ped = Pedestrian(minGap = 0.1)
+	ped = Pedestrian(crosswalk, minGap = 2.0, start = "right")
 
 	sim = Simulation(road, crosswalk, veh, ped, N = 200, ts = 0.1)
 	out = sim.run()
 
 	sim.animate()
-	plotThings = True
+	#plotThings = True
 
 
 

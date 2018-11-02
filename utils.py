@@ -115,11 +115,11 @@ class Vehicle:
 
             if dist2crosswalk > self.brakeDistance:
                 self.state = "braking"
-                print("possible to brake")
+                #print("possible to brake")
 
             else:
                 self.state = "driving"
-                print("not possible to brake safely - driving on")
+                #print("not possible to brake safely - driving on")
 
 
 
@@ -142,7 +142,7 @@ class Vehicle:
             state = 1
 
             #return to driving once past crosswalk or once pedestrian crosses
-            if (xP > crosswalk.width) or (xV > (self.xStop + self.stopBuffer)):
+            if (xP > crosswalk.width or xP < 0) or (xV > (self.xStop + self.stopBuffer)):
                 self.state = "driving"
                 #pdb.set_trace()
 
@@ -151,15 +151,24 @@ class Vehicle:
 
 
 class Pedestrian:
-    def __init__(self, v0 = 0, minGap = 2.0):
+    def __init__(self, crosswalk, v0 = 0, minGap = 2.0, start = "left"):
         self.m = 50. #kg
         self.v0 = v0
         self.radius = 1. #m
         self.state = "waiting" #possible states are "waiting"
         self.waitTime = 0.5 #number of seconds pedestrian takes to gauge situation
         self.kSpeed = 10 #m/s2 per m/s of error
-        self.vDes = 1.2 #m/s
         self.minGap = minGap #seconds
+        self.vDes = 1.2 #m/s
+
+        #start on left side of crosswalk
+        if start == "left":
+            self.xP0 = 0
+
+        #start on right side of crosswalk
+        else:
+            self.xP0 = crosswalk.width
+            self.vDes = -self.vDes
 
     def getAccel(self, xP, dxP, xV, dxV, t, crosswalk):
         accel = self.getAccelStateMachine(xP, dxP, xV, dxV, t, crosswalk)
@@ -209,8 +218,8 @@ class Simulation:
         ddxV = np.zeros(dxV.shape)
 
         #pedestrian motion
-        xP = np.zeros((self.N, 1))
-        dxP = np.zeros(xP.shape); dxP[0] = self.pedestrian.v0
+        xP = np.zeros((self.N, 1)); xP[0] = self.pedestrian.xP0
+        dxP = np.zeros(xP.shape); dxP[0]  = self.pedestrian.v0
         ddxP = np.zeros(xP.shape)
 
         pedestrianState =  np.zeros(xP.shape)
