@@ -79,7 +79,8 @@ class Vehicle:
         self.kSpeed = 1.
         self.xStop = crosswalk.start[1] - self.height * 2 #desired stop position
         self.stopBuffer = 1. #meters, give some room for vehicle to stop
-        self.accelLim = 3.0 # m / s^2
+        self.accelLim = 3.0 # m / s^2 comfortable braking acceleration
+        self.brakeEmergencyLim = 9.0 # m/s^2 - allow car to brake at up to 9 m/s^2 if pedestrian gets too close
         self.brakeDistance = 0. #to be updated in planning step
 
     def getAccel(self, xP, dxP, xV, dxV, t, crosswalk):
@@ -91,8 +92,8 @@ class Vehicle:
         if accel > self.accelLim:
             accel = self.accelLim
 
-        if accel < -self.accelLim:
-            accel = -self.accelLim
+        if accel < -self.brakeEmergencyLim:
+            accel = -self.brakeEmergencyLim
 
         return accel
 
@@ -118,9 +119,21 @@ class Vehicle:
                 #print("possible to brake")
 
             else:
-                self.state = "driving"
-                #print("not possible to brake safely - driving on")
+                self.state = "emergencyBraking"
 
+        elif self.state == "emergencyBraking":
+            state = 3
+            #print("emergencyBraking")
+
+            #calculate distance to crosswalk:
+            dist2crosswalk = self.xStop - xV
+            accel = -dxV **2 / (2 * dist2crosswalk)
+            dxVdes = dxV #not used
+
+            #return to driving once past crosswalk or once pedestrian crosses
+            if (xP > crosswalk.width or xP < crosswalk.width / 2) or (xV > (self.xStop + self.stopBuffer)):
+                self.state = "driving"
+                #pdb.set_trace()
 
 
         elif self.state == "braking":
@@ -142,7 +155,7 @@ class Vehicle:
             state = 1
 
             #return to driving once past crosswalk or once pedestrian crosses
-            if (xP > crosswalk.width or xP < 0) or (xV > (self.xStop + self.stopBuffer)):
+            if (xP > crosswalk.width or xP < crosswalk.width / 2) or (xV > (self.xStop + self.stopBuffer)):
                 self.state = "driving"
                 #pdb.set_trace()
 
@@ -151,19 +164,19 @@ class Vehicle:
 
 
 class Pedestrian:
-    def __init__(self, crosswalk, v0 = 0, minGap = 2.0, start = "left"):
+    def __init__(self, crosswalk, v0 = 0, acceptedGap = 2.0, start = "left"):
         self.m = 50. #kg
         self.v0 = v0
         self.radius = 1. #m
         self.state = "waiting" #possible states are "waiting"
-        self.waitTime = 0.5 #number of seconds pedestrian takes to gauge situation
         self.kSpeed = 10 #m/s2 per m/s of error
-        self.minGap = minGap #seconds
+        self.acceptedGap = acceptedGap #seconds
         self.vDes = 1.2 #m/s
 
         #start on left side of crosswalk
         if start == "left":
-            self.xP0 = 0
+            self.xP0 = 0.
+            
 
         #start on right side of crosswalk
         else:
@@ -177,7 +190,7 @@ class Pedestrian:
     def getAccelStateMachine(self, xP, dxP, xV, dxV, t, crosswalk):
         gap = self.calculateGap(xV, dxV, crosswalk)
         if self.state == "waiting":
-            if t > self.waitTime and gap > self.minGap:
+            if gap < self.acceptedGap:
                 self.state = "walking"
 
             state = 0
@@ -189,11 +202,10 @@ class Pedestrian:
         return accel, state, gap
 
     def calculateGap(self,xV,dxV, crosswalk):
-        gap = (crosswalk.start[1] - xV) / dxV #time based gap
+        gap = (crosswalk.start[1] - xV) / (dxV + .0000000001) #time based gap
         #car is past the crosswalk
         if gap < 0:
             gap = 99999.
-
         return gap
 
 
@@ -207,6 +219,7 @@ class Simulation:
         self.pedestrian = pedestrian
         self.crosswalk = crosswalk
         self.out = {}
+        self.totalTime = 0.
 
     def run(self):
 
@@ -247,6 +260,13 @@ class Simulation:
 
             xV[i] = self.ts * dxV[i] + xV[i-1]
             xP[i] = self.ts * dxP[i] + xP[i-1]
+
+            #check for termination
+            if xV[i] > self.road.length:
+                self.totalTime = t[i]
+                print("Simulation terminated after %d seconds." %t[i])
+                break
+
 
 
         self.out = {'t': t, 'xV': xV, 'dxV': dxV, 'ddxV': ddxV, 'xP': xP, 'dxP': dxP, 'ddxP': ddxP,

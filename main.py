@@ -3,27 +3,36 @@ import matplotlib.pyplot as plt
 from utils import *
 
 
-NUM_SIMULATIONS = 10
-roadLength = 100.
+######################################################################################################
+############################## SIMULATION PARAMETERS #################################################
+######################################################################################################
+
+NUM_SIMULATIONS = 1
+roadFraction = 0.67 #defines position of crosswalk
+v0 = 15. #desired speed of vehicle
+gapMu = 4.0 #mean accepted gap for an adult, from feliciani et al. , in seconds
+gapVariance = 2.5 #variance in accepted gap, from feliciani et al. 
 
 for i in range(NUM_SIMULATIONS):
 
-	roadFraction = np.random.rand()
+	acceptedGap = np.sqrt(gapVariance) * np.random.randn() + gapMu  #uncertainty in gap acceptance of pedestrian from Feliciani et al. 
+	print(acceptedGap)
+
+	roadLength = acceptedGap * v0 / roadFraction  #make sure we simulate for long enough
+	print(roadLength)
 
 	road = Road(length = roadLength)
 	crosswalk = Crosswalk(road, roadFraction = roadFraction) 
-	veh = Vehicle(crosswalk = crosswalk, v0 = 15.)
-	ped = Pedestrian(crosswalk, minGap = 2.0, start = "right")
+	veh = Vehicle(crosswalk = crosswalk, v0 = v0)
+	ped = Pedestrian(crosswalk, acceptedGap = acceptedGap, start = "right")
 
 	sim = Simulation(road, crosswalk, veh, ped, N = 200, ts = 0.1)
 	out = sim.run()
 
 	sim.animate()
-	#plotThings = True
 
 
-
-
+# plotThings = True
 
 # if plotThings:
 
